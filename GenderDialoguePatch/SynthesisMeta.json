@@ -1,10 +1,13 @@
 {
   "Nickname": "GenderDialoguePatch",
-  "Visibility": "Exclude",
-  "OneLineDescription": "",
-  "LongDescription": "",
+  "Visibility": "Visible",
+  "OneLineDescription": "Patcher for Gender-Neutral Dialogue: https://www.nexusmods.com/skyrimspecialedition/mods/67612",
+  "LongDescription": "This patcher only adds the proper conditions to existing dialogue.\r\nIf you are exclusively using the They/Them option then this will result in the dialogue not playing at all and can result in softlocked quests.\r\n",
   "PreferredAutoVersioning": "Default",
-  "RequiredMods": [],
+  "RequiredMods": [
+    "Gender-Neutral Dialogue.esp",
+    "Update.esm"
+  ],
   "TargetedReleases": [
     "SkyrimSE"
   ]

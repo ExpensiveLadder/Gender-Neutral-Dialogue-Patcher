@@ -20,7 +20,7 @@ namespace GenderDialoguePatch
                 .Run(args);
         }
 
-        public static readonly FormLink<Keyword> ActorNonBinary = FormKey.Factory("EBDA00:Update.esm").ToLink<Keyword>();
+        public static readonly FormLink<Keyword> NpcNonBinary = FormKey.Factory("EBDA00:Update.esm").ToLink<Keyword>();
         public static readonly FormLink<Global> He = FormKey.Factory("000CCC:Gender-Neutral Dialogue.esp").ToLink<Global>();
         public static readonly FormLink<Global> She = FormKey.Factory("000CCD:Gender-Neutral Dialogue.esp").ToLink<Global>();
         public static readonly FormLink<Global> They = FormKey.Factory("000CCE:Gender-Neutral Dialogue.esp").ToLink<Global>();
@@ -87,17 +87,8 @@ namespace GenderDialoguePatch
                         var conditionFunction = (FunctionConditionData)condition.Data.DeepCopy();
                         if (conditionFunction.Function == Condition.Function.HasKeyword)
                         {
-                            if (conditionFunction.ParameterOneRecord.FormKey.GetHashCode() == ActorNonBinary.FormKey.GetHashCode()) return false;
+                            if (conditionFunction.ParameterOneRecord.FormKey.GetHashCode() == NpcNonBinary.FormKey.GetHashCode()) return false;
                         }
-                        /*
-                        else if (conditionFunction.Function == Condition.Function.GetGlobalValue)
-                        {
-                            foreach (var pronoun in Pronouns)
-                            {
-                                if (conditionFunction.ParameterOneRecord.FormKey == pronoun.FormKey) return false;
-                            }
-                        }
-                        */
                         else if (conditionFunction.Function == Condition.Function.GetPCIsSex)
                         {
                             returnTrue = true;
@@ -175,7 +166,7 @@ namespace GenderDialoguePatch
                                         {
                                             Function = Condition.Function.HasKeyword,
                                             RunOnType = conditionFunction.RunOnType,
-                                            ParameterOneRecord = ActorNonBinary,
+                                            ParameterOneRecord = NpcNonBinary,
                                         }
                                     });
                                     response.Conditions.Insert(index, new ConditionFloat() // is player
