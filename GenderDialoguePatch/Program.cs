@@ -49,13 +49,10 @@ namespace GenderDialoguePatch
                 .Run(args);
         }
 
-        public static readonly FormLink<Global> Female = FormKey.Factory("003F48:Gender-Neutral Dialogue.esp").ToLink<Global>();
-        public static readonly FormLink<Global> Male = FormKey.Factory("003F49:Gender-Neutral Dialogue.esp").ToLink<Global>();
+        public static readonly FormLink<Global> Female = FormKey.Factory("000F48:Gender-Neutral Dialogue.esp").ToLink<Global>();
+        public static readonly FormLink<Global> Male = FormKey.Factory("000F49:Gender-Neutral Dialogue.esp").ToLink<Global>();
         public static readonly FormLink<Keyword> NpcNonBinary = FormKey.Factory("EBDA00:Update.esm").ToLink<Keyword>();
         public static readonly FormLink<GlobalShort> CustomPronouns = FormKey.Factory("000F4A:Gender-Neutral Dialogue.esp").ToLink<GlobalShort>();
-
-        //public static readonly FormKey Female = FormKey.Factory("003F48:Gender-Neutral Dialogue.esp");
-        //public static readonly FormKey Male = FormKey.Factory("003F49:Gender-Neutral Dialogue.esp");
 
         public static bool IsValidDialogue(IDialogResponsesGetter response)
         {
@@ -139,7 +136,6 @@ namespace GenderDialoguePatch
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
-                                        Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
                                         Data = new FunctionConditionData()
@@ -154,7 +150,6 @@ namespace GenderDialoguePatch
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
-                                        Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
                                         Data = new FunctionConditionData()
@@ -175,7 +170,6 @@ namespace GenderDialoguePatch
                                         responses.Conditions.Remove(condition);
                                         responses.Conditions.Insert(index, new ConditionFloat()
                                         {
-                                            Flags = Condition.Flag.OR,
                                             CompareOperator = CompareOperator.EqualTo,
                                             ComparisonValue = 1,
                                             Data = new FunctionConditionData()
@@ -190,7 +184,6 @@ namespace GenderDialoguePatch
                                         responses.Conditions.Remove(condition);
                                         responses.Conditions.Insert(index, new ConditionFloat()
                                         {
-                                            Flags = Condition.Flag.OR,
                                             CompareOperator = CompareOperator.EqualTo,
                                             ComparisonValue = 1,
                                             Data = new FunctionConditionData()
