@@ -12,8 +12,12 @@ namespace GenderDialoguePatch
 {
     public class TestSettings
     {
+        [SettingName("Patch Book Text")]
+        [Tooltip("Patches book text to refer to the player using they/them, or custom pronouns if they are enabled")]
+        public bool PatchBookText = true;
+
         [SettingName("Custom Pronouns")]
-        public bool PatchCustomPronouns = true;
+        public bool PatchCustomPronouns = false;
 
         [SettingName("Nominative")]
         public string CustomPronoun_Nominative = "they";
@@ -21,8 +25,11 @@ namespace GenderDialoguePatch
         [SettingName("Accusative")]
         public string CustomPronoun_Accusative = "them";
 
-        [SettingName("Possessive")]
-        public string CustomPronoun_Possessive = "their";
+        [SettingName("Pronominal Possessive")]
+        public string CustomPronoun_PronominalPossessive = "their";
+
+        [SettingName("Predicative Possessive")]
+        public string CustomPronoun_PredicativePossessive = "theirs";
 
         [SettingName("Reflexive")]
         public string CustomPronoun_Reflexive = "themself";
@@ -120,16 +127,49 @@ namespace GenderDialoguePatch
                     }
                     Console.WriteLine(item.ModKey.FileName + " " + responses.FormKey + " " + responsetext);
 
-                    if (responses.Flags == null) responses.Flags = new();
+                    responses.Flags ??= new();
                     responses.Flags.Flags |= DialogResponses.Flag.Random;
 
                     var index = 0;
                     foreach (var condition in responses.Conditions)
                     {
-                        if (condition.Data != null)
+                        if (condition.Data == null) continue;
+                        var conditionFunction = (FunctionConditionData)condition.Data;
+                        if (conditionFunction.Function == Condition.Function.GetPCIsSex)
                         {
-                            var conditionFunction = (FunctionConditionData)condition.Data;
-                            if (conditionFunction.Function == Condition.Function.GetPCIsSex)
+                            if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            {
+                                responses.Conditions.Remove(condition);
+                                responses.Conditions.Insert(index, new ConditionFloat()
+                                {
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 1,
+                                    Data = new FunctionConditionData()
+                                    {
+                                        Function = Condition.Function.GetGlobalValue,
+                                        ParameterOneRecord = Female
+                                    }
+                                });
+                            }
+                            else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            {
+                                responses.Conditions.Remove(condition);
+                                responses.Conditions.Insert(index, new ConditionFloat()
+                                {
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 1,
+                                    Data = new FunctionConditionData()
+                                    {
+                                        Function = Condition.Function.GetGlobalValue,
+                                        ParameterOneRecord = Male
+                                    }
+                                });
+                            }
+                            break;
+                        }
+                        else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                        {
+                            if (conditionFunction.Reference.FormKey == Constants.Player.FormKey)
                             {
                                 if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
@@ -159,108 +199,73 @@ namespace GenderDialoguePatch
                                         }
                                     });
                                 }
-                                break;
                             }
-                            else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                            else
                             {
-                                if (conditionFunction.Reference.FormKey == Constants.Player.FormKey)
+                                responses.Conditions.Insert(index + 1, new ConditionFloat()
                                 {
-                                    if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 0,
+                                    Data = new FunctionConditionData()
                                     {
-                                        responses.Conditions.Remove(condition);
-                                        responses.Conditions.Insert(index, new ConditionFloat()
-                                        {
-                                            CompareOperator = CompareOperator.EqualTo,
-                                            ComparisonValue = 1,
-                                            Data = new FunctionConditionData()
-                                            {
-                                                Function = Condition.Function.GetGlobalValue,
-                                                ParameterOneRecord = Female
-                                            }
-                                        });
+                                        Function = Condition.Function.HasKeyword,
+                                        RunOnType = conditionFunction.RunOnType,
+                                        ParameterOneRecord = NpcNonBinary,
                                     }
-                                    else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
-                                    {
-                                        responses.Conditions.Remove(condition);
-                                        responses.Conditions.Insert(index, new ConditionFloat()
-                                        {
-                                            CompareOperator = CompareOperator.EqualTo,
-                                            ComparisonValue = 1,
-                                            Data = new FunctionConditionData()
-                                            {
-                                                Function = Condition.Function.GetGlobalValue,
-                                                ParameterOneRecord = Male
-                                            }
-                                        });
-                                    }
-                                }
-                                else
+                                });
+                                responses.Conditions.Insert(index, new ConditionFloat() // is player
                                 {
-                                    responses.Conditions.Insert(index + 1, new ConditionFloat()
+                                    Flags = Condition.Flag.OR,
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 1,
+                                    Data = new FunctionConditionData()
                                     {
-                                        CompareOperator = CompareOperator.EqualTo,
-                                        ComparisonValue = 0,
-                                        Data = new FunctionConditionData()
-                                        {
-                                            Function = Condition.Function.HasKeyword,
-                                            RunOnType = conditionFunction.RunOnType,
-                                            ParameterOneRecord = NpcNonBinary,
-                                        }
-                                    });
-                                    responses.Conditions.Insert(index, new ConditionFloat() // is player
+                                        Function = Condition.Function.GetIsID,
+                                        RunOnType = conditionFunction.RunOnType,
+                                        ParameterOneRecord = Skyrim.Npc.Player,
+                                    }
+                                });
+                                responses.Conditions.Insert(index, new ConditionFloat() // not player
+                                {
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 0,
+                                    Data = new FunctionConditionData()
+                                    {
+                                        Function = Condition.Function.GetIsID,
+                                        RunOnType = conditionFunction.RunOnType,
+                                        ParameterOneRecord = Skyrim.Npc.Player
+                                    }
+                                });
+                                if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                {
+                                    responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
                                         Data = new FunctionConditionData()
                                         {
-                                            Function = Condition.Function.GetIsID,
-                                            RunOnType = conditionFunction.RunOnType,
-                                            ParameterOneRecord = Skyrim.Npc.Player,
+                                            Function = Condition.Function.GetGlobalValue,
+                                            ParameterOneRecord = Female
                                         }
                                     });
-                                    responses.Conditions.Insert(index, new ConditionFloat() // not player
+                                }
+                                else
+                                {
+                                    responses.Conditions.Insert(index, new ConditionFloat()
                                     {
+                                        Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
-                                        ComparisonValue = 0,
+                                        ComparisonValue = 1,
                                         Data = new FunctionConditionData()
                                         {
-                                            Function = Condition.Function.GetIsID,
-                                            RunOnType = conditionFunction.RunOnType,
-                                            ParameterOneRecord = Skyrim.Npc.Player
+                                            Function = Condition.Function.GetGlobalValue,
+                                            ParameterOneRecord = Male
                                         }
                                     });
-                                    if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
-                                    {
-                                        responses.Conditions.Insert(index, new ConditionFloat()
-                                        {
-                                            Flags = Condition.Flag.OR,
-                                            CompareOperator = CompareOperator.EqualTo,
-                                            ComparisonValue = 1,
-                                            Data = new FunctionConditionData()
-                                            {
-                                                Function = Condition.Function.GetGlobalValue,
-                                                ParameterOneRecord = Female
-                                            }
-                                        });
-                                    }
-                                    else
-                                    {
-                                        responses.Conditions.Insert(index, new ConditionFloat()
-                                        {
-                                            Flags = Condition.Flag.OR,
-                                            CompareOperator = CompareOperator.EqualTo,
-                                            ComparisonValue = 1,
-                                            Data = new FunctionConditionData()
-                                            {
-                                                Function = Condition.Function.GetGlobalValue,
-                                                ParameterOneRecord = Male
-                                            }
-                                        });
-                                    }
                                 }
-                                break;
                             }
+                            break;
                         }
                         index++;
                     }
@@ -271,23 +276,77 @@ namespace GenderDialoguePatch
 
                     foreach (var response in responses.Responses)
                     {
-                        string? text = response.Text.String;
-                        if (text == null)
-                        {
-                            throw new Exception("Null text for dialogue response");
-                        }
-
+                        string? text = response.Text.String ?? throw new Exception("Null text for dialogue response");
                         text = text.Replace("&&p_Nominative&&", Settings.Value.CustomPronoun_Nominative);
                         text = text.Replace("&&P_Nominative&&", CapatalizeFirst(Settings.Value.CustomPronoun_Nominative));
                         text = text.Replace("&&p_Accusative&&", Settings.Value.CustomPronoun_Accusative);
                         text = text.Replace("&&P_Accusative&&", CapatalizeFirst(Settings.Value.CustomPronoun_Accusative));
                         text = text.Replace("&&p_Reflexive&&", Settings.Value.CustomPronoun_Reflexive);
                         text = text.Replace("&&P_Reflexive&&", CapatalizeFirst(Settings.Value.CustomPronoun_Reflexive));
-                        text = text.Replace("&&p_Possessive&&", Settings.Value.CustomPronoun_Possessive);
-                        text = text.Replace("&&P_Possessive&&", CapatalizeFirst(Settings.Value.CustomPronoun_Possessive));
+                        text = text.Replace("&&p_Possessive&&", Settings.Value.CustomPronoun_PronominalPossessive);
+                        text = text.Replace("&&P_Possessive&&", CapatalizeFirst(Settings.Value.CustomPronoun_PronominalPossessive));
 
                         response.Text = text;
                         Console.WriteLine(text);
+                    }
+                }
+            }
+
+            if (Settings.Value.PatchBookText)
+            {
+                foreach (var item in state.LoadOrder.PriorityOrder.Book().WinningContextOverrides())
+                {
+                    var text = item.Record.BookText.ToString();
+                    if (text == null) continue;
+                    if (text.Contains("<Alias.Pronoun=Player>") || text.Contains("<Alias.PronounObj=Player>") || text.Contains("<Alias.PronounPos=Player>") || text.Contains("<Alias.PronounPosObj=Player>") || text.Contains("<Alias.PronounRef=Player>") || text.Contains("<Alias.PronounInt=Player>") || text.Contains("<Alias.PronounCap=Player>") || text.Contains("<Alias.PronounObjCap=Player>") || text.Contains("<Alias.PronounPosCap=Player>") || text.Contains("<Alias.PronounPosObjCap=Player>") || text.Contains("<Alias.PronounRefCap=Player>") || text.Contains("<Alias.PronounIntCap=Player>"))
+                    {
+                        var book = item.GetOrAddAsOverride(state.PatchMod);
+
+                        if (Settings.Value.PatchCustomPronouns)
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player>", Settings.Value.CustomPronoun_Nominative);
+                            text = text.Replace("<Alias.PronounCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Nominative));
+                            text = text.Replace("<Alias.PronounObj=Player>", Settings.Value.CustomPronoun_Accusative);
+                            text = text.Replace("<Alias.PronounObjCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Accusative));
+                            text = text.Replace("<Alias.PronounPosObj=Player>", Settings.Value.CustomPronoun_PronominalPossessive);
+                            text = text.Replace("<Alias.PronounPosObjCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_PronominalPossessive));
+                            text = text.Replace("<Alias.PronounPos=Player>", Settings.Value.CustomPronoun_PredicativePossessive);
+                            text = text.Replace("<Alias.PronounPosCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_PredicativePossessive));
+                            text = text.Replace("<Alias.PronounRef=Player>", Settings.Value.CustomPronoun_Reflexive);
+                            text = text.Replace("<Alias.PronounRefCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Reflexive));
+                            text = text.Replace("<Alias.PronounInt=Player>", Settings.Value.CustomPronoun_Reflexive);
+                            text = text.Replace("<Alias.PronounIntCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Reflexive));
+                        }
+                        else
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> is", "they are");
+                            text = text.Replace("<Alias.PronounCap=Player> is", "They are");
+                            text = text.Replace("<Alias.Pronoun=Player> was", "they were");
+                            text = text.Replace("<Alias.PronounCap=Player> was", "They were");
+                            text = text.Replace("<Alias.Pronoun=Player> reaches", "they reach");
+                            text = text.Replace("<Alias.PronounCap=Player> reaches", "They reach");
+                            text = text.Replace("<Alias.Pronoun=Player> calls", "they call");
+                            text = text.Replace("<Alias.PronounCap=Player> calls", "They call");
+                            text = text.Replace("<Alias.Pronoun=Player> does", "they do");
+                            text = text.Replace("<Alias.PronounCap=Player> does", "They do");
+                            text = text.Replace("<Alias.Pronoun=Player>'s", "they've");
+                            text = text.Replace("<Alias.PronounCap=Player>'s", "They've");
+                            text = text.Replace("<Alias.Pronoun=Player>", "they");
+                            text = text.Replace("<Alias.PronounCap=Player>", "They");
+                            text = text.Replace("<Alias.PronounObj=Player>", "them");
+                            text = text.Replace("<Alias.PronounObjCap=Player>", "Them");
+                            text = text.Replace("<Alias.PronounPosObj=Player>", "their");
+                            text = text.Replace("<Alias.PronounPosObjCap=Player>", "Their");
+                            text = text.Replace("<Alias.PronounPos=Player>", "theirs");
+                            text = text.Replace("<Alias.PronounPosCap=Player>", "Theirs");
+                            text = text.Replace("<Alias.PronounRef=Player>", "themself");
+                            text = text.Replace("<Alias.PronounRefCap=Player>", "Themself");
+                            text = text.Replace("<Alias.PronounInt=Player>", "themself");
+                            text = text.Replace("<Alias.PronounIntCap=Player>", "Themself");
+                        }
+
+                        book.BookText = text;
+                        Console.WriteLine(item.ModKey.FileName + " " + book.FormKey + " " + book.EditorID + System.Environment.NewLine + text);
                     }
                 }
             }
