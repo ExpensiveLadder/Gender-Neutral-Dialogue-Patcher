@@ -1,3 +1,4 @@
+using DynamicData;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.FormKeys.SkyrimSE;
 using Mutagen.Bethesda.Plugins;
@@ -6,7 +7,10 @@ using Mutagen.Bethesda.Synthesis;
 using Mutagen.Bethesda.WPF.Reflection.Attributes;
 using Noggog;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace GenderDialoguePatch
 {
@@ -109,6 +113,21 @@ namespace GenderDialoguePatch
                 }
             }
             return false;
+        }
+
+        public static bool TryCreateAlias(string textToReplace, string aliasName, FormKey reference, List<QuestAlias> aliases, string text, uint aliasID, out string newtext)
+        {
+            newtext = text.Replace(textToReplace, "<Alias=" + aliasName + ">");
+            if (!text.Contains(textToReplace)) return false;
+            aliasID += 1;
+            aliases.Add(new QuestAlias()
+            {
+                Name = aliasName,
+                ForcedReference = reference.ToNullableLink<IPlacedGetter>(),
+                ID = aliasID,
+                Flags = QuestAlias.Flag.StoresText
+            });
+            return true;
         }
 
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
@@ -292,6 +311,364 @@ namespace GenderDialoguePatch
                 }
             }
 
+            foreach (var questGetter in state.LoadOrder.PriorityOrder.Quest().WinningOverrides())
+            {
+                List<QuestAlias> aliases = new();
+                bool overriden = false;
+                uint maxAliasID = 0;
+                foreach (var aliasGetter in questGetter.Aliases)
+                {
+                    if (aliasGetter.ID > maxAliasID) maxAliasID = aliasGetter.ID;
+                }
+                foreach (var aliasGetter in questGetter.Aliases)
+                {
+                    Book? book = null;
+                    if (aliasGetter.CreateReferenceToObject == null) continue;
+                    if (aliasGetter.CreateReferenceToObject.Object.TryResolve<IBookGetter>(state.LinkCache, out var bookGetter))
+                    {
+                        if (bookGetter.Teaches is BookSpell) continue;
+                        book = bookGetter.DeepCopy();
+                    }
+                    if (book != null)
+                    {
+                        string text = book.BookText.ToString();
+                        if (text == null) continue;
+
+                        //if (TryCreateAlias("<Alias.Pronoun=Player>", "They", FormKey.Factory("000FD5:Gender-Neutral Dialogue.esp"), aliases, text, maxAliasID, out var newtext))
+
+                        if (text.Contains("<Alias.PronounPos=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounPos=Player>", "<Alias=theirs>");
+                            if (!aliases.Any(alias => alias.Name == "theirs"))
+                            {
+                                maxAliasID += 1;
+                                aliases.Add(new QuestAlias()
+                                {
+                                    Name = "theirs",
+                                    ForcedReference = FormKey.Factory("0008C7:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                    Flags = QuestAlias.Flag.StoresText,
+                                    ID = maxAliasID
+                                });
+                            }
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounPosCap=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounPosCap=Player>", "<Alias=Theirs>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "Theirs",
+                                ForcedReference = FormKey.Factory("000B52:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounObj=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounObj=Player>", "<Alias=them>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "them",
+                                ForcedReference = FormKey.Factory("0008C5:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounObjCap=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounObjCap=Player>", "<Alias=Them>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "Them",
+                                ForcedReference = FormKey.Factory("000B51:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounInt=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounInt=Player>", "<Alias=themself>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "themself",
+                                ForcedReference = FormKey.Factory("0008C8:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounIntCap=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounIntCap=Player>", "<Alias=Themself>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "Themself",
+                                ForcedReference = FormKey.Factory("000B32:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounRef=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounRef=Player>", "<Alias=themself>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "themself",
+                                ForcedReference = FormKey.Factory("0008C8:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounRefCap=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounRefCap=Player>", "<Alias=Themself>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "Themself",
+                                ForcedReference = FormKey.Factory("000B32:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounPosObj=Player> does"))
+                        {
+                            text = text.Replace("<Alias.PronounPosObj=Player> does", "<Alias=their>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "their",
+                                ForcedReference = FormKey.Factory("0008C6:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounPosObjCap=Player> does"))
+                        {
+                            text = text.Replace("<Alias.PronounPosObjCap=Player> does", "<Alias=Their>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "Their",
+                                ForcedReference = FormKey.Factory("0008D1:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player>'s"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player>'s", "<Alias=they've>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they've",
+                                ForcedReference = FormKey.Factory("0008C9:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player>'s"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player>'s", "<Alias=They've>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They've",
+                                ForcedReference = FormKey.Factory("000B53:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player> is"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> is", "<Alias=they are>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they are",
+                                ForcedReference = FormKey.Factory("000FD6:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player> is"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player> are", "<Alias=They are>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They are",
+                                ForcedReference = FormKey.Factory("0008CB:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player> reaches"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> reaches", "<Alias=they reach>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they reach",
+                                ForcedReference = FormKey.Factory("0008D2:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player> reaches"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player> reaches", "<Alias=They reach>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they reach",
+                                ForcedReference = FormKey.Factory("0008D3:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player> does"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> does", "<Alias=they do>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they do",
+                                ForcedReference = FormKey.Factory("0008CF:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player> does"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player> does", "<Alias=They do>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They do",
+                                ForcedReference = FormKey.Factory("0008D0:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player> calls"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> calls", "<Alias=they call>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they call",
+                                ForcedReference = FormKey.Factory("0008D0:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player> calls"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player> calls", "<Alias=They call>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They call",
+                                ForcedReference = FormKey.Factory("0008CE:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player> was"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player> was", "<Alias=they were>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they were",
+                                ForcedReference = FormKey.Factory("000FD7:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player> was"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player> was", "<Alias=They were>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They were",
+                                ForcedReference = FormKey.Factory("0008CA:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.Pronoun=Player>"))
+                        {
+                            text = text.Replace("<Alias.Pronoun=Player>", "<Alias=they>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "they",
+                                ForcedReference = FormKey.Factory("000FD5:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+                        if (text.Contains("<Alias.PronounCap=Player>"))
+                        {
+                            text = text.Replace("<Alias.PronounCap=Player>", "<Alias=They>");
+                            maxAliasID += 1;
+                            aliases.Add(new QuestAlias()
+                            {
+                                Name = "They",
+                                ForcedReference = FormKey.Factory("0008CC:Gender-Neutral Dialogue.esp").ToNullableLink<IPlacedGetter>(),
+                                Flags = QuestAlias.Flag.StoresText,
+                                ID = maxAliasID
+                            });
+                            overriden = true;
+                        }
+
+                        if (overriden)
+                        {
+                            book.BookText = text;
+                            state.PatchMod.Books.Set(book);
+                            Console.WriteLine(/*book.ModKey.FileName + " " + */book.FormKey + " " + book.EditorID + Environment.NewLine + text);
+                        }
+                    }
+                }
+                if (overriden)
+                {
+                    var quest = questGetter.DeepCopy();
+                    quest.Aliases.Add(aliases);
+                    state.PatchMod.Quests.Set(quest);
+                }
+            }
+
+            /*
             if (Settings.Value.PatchBookText)
             {
                 foreach (var item in state.LoadOrder.PriorityOrder.Book().WinningContextOverrides())
@@ -346,10 +723,11 @@ namespace GenderDialoguePatch
                         }
 
                         book.BookText = text;
-                        Console.WriteLine(item.ModKey.FileName + " " + book.FormKey + " " + book.EditorID + System.Environment.NewLine + text);
+                        Console.WriteLine(item.ModKey.FileName + " " + book.FormKey + " " + book.EditorID + Environment.NewLine + text);
                     }
                 }
             }
+            */
         }
     }
 }
