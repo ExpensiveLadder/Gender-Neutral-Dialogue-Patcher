@@ -34,11 +34,13 @@ namespace GenderDialoguePatch
         public string CustomPronoun_Reflexive = "themself";
     }
 
-    public class AliasInfos
+    public class QuestInfo
     {
-        public uint maxAliasID = 0;
+        public uint nextAliasID = 0;
         public List<QuestAlias> aliases = new();
         public bool overriden = false;
+        public QuestAdapter scripts = new();
+        public IFormLink<IQuestGetter> quest = new FormLink<IQuestGetter>();
     }
 
     public class Program
@@ -117,20 +119,38 @@ namespace GenderDialoguePatch
             return false;
         }
 
-        public static string TryCreateAlias(string textToReplace, string aliasName, FormKey reference, AliasInfos aliasInfos, string text)
+        public static string TryCreateAlias(string textToReplace, string aliasName, FormKey reference, QuestInfo aliasInfos, string text)
         {
             if (text.Contains(textToReplace)) {
-                text = text.Replace(textToReplace, "<Alias=" + aliasName + ">");
-                if (!aliasInfos.aliases.Any(alias => alias.Name == "theirs"))
+                aliasInfos.overriden = true;
+                text = text.Replace(textToReplace, "<Alias.Race=" + aliasName + ">");
+                if (!aliasInfos.aliases.Any(alias => alias.Name == aliasName))
                 {
-                    aliasInfos.maxAliasID += 1;
                     aliasInfos.aliases.Add(new QuestAlias()
                     {
                         Name = aliasName,
                         ForcedReference = reference.ToNullableLink<IPlacedGetter>(),
                         Flags = QuestAlias.Flag.StoresText,
-                        ID = aliasInfos.maxAliasID
+                        ID = aliasInfos.nextAliasID
                     });
+                    aliasInfos.scripts.Scripts.Add(new ScriptEntry()
+                    {
+                        Flags = ScriptEntry.Flag.Local,
+                        Name = "GenderNeutralDialogueQuestAlias",
+                        Properties = new() {
+                            new ScriptObjectProperty() {
+                                Name = "forceref",
+                                Flags = ScriptProperty.Flag.Edited,
+                                Object = reference.ToLink<IPlacedGetter>()
+                            },
+                            new ScriptIntProperty() {
+                                Name = "index",
+                                Flags = ScriptProperty.Flag.Edited,
+                                Data = (short)aliasInfos.nextAliasID
+                            },
+                        }
+                    });
+                    aliasInfos.nextAliasID++;
                 }
             }
             return text;
@@ -319,11 +339,14 @@ namespace GenderDialoguePatch
 
             foreach (var questGetter in state.LoadOrder.PriorityOrder.Quest().WinningOverrides())
             {
-                AliasInfos aliases = new();
+                QuestInfo questInfo = new();
+                if (questGetter.VirtualMachineAdapter != null) questInfo.scripts = questGetter.VirtualMachineAdapter.DeepCopy();
+                questInfo.quest = questGetter.ToLink();
                 foreach (var aliasGetter in questGetter.Aliases)
                 {
-                    if (aliasGetter.ID > aliases.maxAliasID) aliases.maxAliasID = aliasGetter.ID;
+                    if (aliasGetter.ID > questInfo.nextAliasID) questInfo.nextAliasID = aliasGetter.ID;
                 }
+                questInfo.nextAliasID++;
                 foreach (var aliasGetter in questGetter.Aliases)
                 {
                     Book? book = null;
@@ -336,9 +359,8 @@ namespace GenderDialoguePatch
                     if (book == null) continue;
                     string text = book.BookText.ToString();
                     if (text == null) continue;
-
-                    text = TryCreateAlias("<Alias.PronounPosObj=Player> does", "they do", FormKey.Factory("0008C6:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounPosObjCap=Player> does", "They do", FormKey.Factory("0008D1:Gender-Neutral Dialogue.esp"), aliases, text);
+                    
+                    /*
                     text = TryCreateAlias("<Alias.Pronoun=Player>'s", "they've", FormKey.Factory("0008C9:Gender-Neutral Dialogue.esp"), aliases, text);
                     text = TryCreateAlias("<Alias.PronounCap=Player>'s", "They've", FormKey.Factory("000B53:Gender-Neutral Dialogue.esp"), aliases, text);
                     text = TryCreateAlias("<Alias.Pronoun=Player> is", "they are", FormKey.Factory("000FD6:Gender-Neutral Dialogue.esp"), aliases, text);
@@ -351,28 +373,32 @@ namespace GenderDialoguePatch
                     text = TryCreateAlias("<Alias.PronounCap=Player> calls", "They call", FormKey.Factory("0008CE:Gender-Neutral Dialogue.esp"), aliases, text);
                     text = TryCreateAlias("<Alias.Pronoun=Player> was", "they were", FormKey.Factory("000FD7:Gender-Neutral Dialogue.esp"), aliases, text);
                     text = TryCreateAlias("<Alias.PronounCap=Player> was", "They were", FormKey.Factory("0008CA:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player>", "they", FormKey.Factory("000FD5:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player>", "They", FormKey.Factory("0008CC:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounPos=Player>", "theirs", FormKey.Factory("0008C7:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounPosCap=Player>", "Theirs", FormKey.Factory("000B52:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounObj=Player>", "them", FormKey.Factory("0008C5:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounObjCap=Player>", "Them", FormKey.Factory("000B51:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounInt=Player>", "themself", FormKey.Factory("0008C8:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounIntCap=Player>", "Themself", FormKey.Factory("000B32:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounRef=Player>", "themself", FormKey.Factory("0008C8:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounRefCap=Player>", "Themself", FormKey.Factory("000B32:Gender-Neutral Dialogue.esp"), aliases, text);
+                    */
+                    text = TryCreateAlias("<Alias.Pronoun=Player>", "they", FormKey.Factory("000F24:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounCap=Player>", "They", FormKey.Factory("000F25:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPosObj=Player>", "their", FormKey.Factory("000F26:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPosObjCap=Player>", "Their", FormKey.Factory("000F27:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPos=Player>", "theirs", FormKey.Factory("000F28:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPosCap=Player>", "Theirs", FormKey.Factory("000F29:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounObj=Player>", "them", FormKey.Factory("000F30:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounObjCap=Player>", "Them", FormKey.Factory("000F31:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounInt=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounIntCap=Player>", "Themself", FormKey.Factory("000FCF:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounRef=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounRefCap=Player>", "Themself", FormKey.Factory("000FCF:Gender-Neutral Dialogue.esp"), questInfo, text);
 
-                    if (aliases.overriden)
+                    if (questInfo.overriden)
                     {
                         book.BookText = text;
                         state.PatchMod.Books.Set(book);
-                        Console.WriteLine(/*book.ModKey.FileName + " " + */book.FormKey + " " + book.EditorID + Environment.NewLine + text);
+                        Console.WriteLine(Environment.NewLine + /*book.ModKey.FileName + " " + */book.FormKey + " " + book.EditorID + Environment.NewLine + text);
                     }
                 }
-                if (aliases.overriden)
+                if (questInfo.overriden)
                 {
                     var quest = questGetter.DeepCopy();
-                    quest.Aliases.Add(aliases.aliases);
+                    quest.Aliases.Add(questInfo.aliases);
+                    quest.VirtualMachineAdapter = questInfo.scripts;
                     state.PatchMod.Quests.Set(quest);
                 }
             }
