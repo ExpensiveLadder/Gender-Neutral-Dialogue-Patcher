@@ -5,6 +5,7 @@ using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using Mutagen.Bethesda.WPF.Reflection.Attributes;
+using Mutagen.Bethesda.Plugins.Records;
 using Noggog;
 using System;
 using System.Collections.Generic;
@@ -78,16 +79,16 @@ namespace GenderDialoguePatch
                 {
                     if (condition.Data != null)
                     {
-                        var conditionFunction = (FunctionConditionData)condition.Data.DeepCopy();
-                        if (conditionFunction.Function == Condition.Function.HasKeyword)
+                        if (condition.Data is HasKeywordConditionData)
                         {
-                            if (conditionFunction.ParameterOneRecord.FormKey.GetHashCode() == NpcNonBinary.FormKey.GetHashCode()) return false;
+                            HasKeywordConditionData? conditionData = condition.Data as HasKeywordConditionData ?? throw new Exception();
+                            if (conditionData.Keyword.Link.FormKey.GetHashCode() == NpcNonBinary.FormKey.GetHashCode()) return false;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetPCIsSex)
+                        else if (condition.Data is GetPCIsSexConditionData)
                         {
                             returnTrue = true;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                        else if (condition.Data is GetIsSexConditionData && condition.Data.RunOnType != Condition.RunOnType.Subject)
                         {
                             returnTrue = true;
                         }
@@ -103,15 +104,11 @@ namespace GenderDialoguePatch
             {
                 foreach (var condition in response.Conditions)
                 {
-                    if (condition.Data != null)
+                    if (condition.Data != null && condition.Data is GetGlobalValueConditionData)
                     {
-                        var conditionFunction = (FunctionConditionData)condition.Data.DeepCopy();
-                        if (conditionFunction.Function == Condition.Function.GetGlobalValue)
-                        {
-                            if (conditionFunction.ParameterOneRecord.FormKey == CustomPronouns.FormKey)
-                            {
-                                return true;
-                            }
+                        GetGlobalValueConditionData? conditionData = condition.Data as GetGlobalValueConditionData ?? throw new Exception();
+                        if (conditionData.Global.Link.FormKey == CustomPronouns.FormKey) {
+                            return true;
                         }
                     }
                 }
@@ -119,9 +116,10 @@ namespace GenderDialoguePatch
             return false;
         }
 
-        public static string TryCreateAlias(string textToReplace, string aliasName,FormKey reference, QuestInfo aliasInfos, string text)
+        public static string TryCreateAlias(string textToReplace, string aliasName, FormKey reference, QuestInfo aliasInfos, string text)
         {
-            if (text.Contains(textToReplace) || text.Contains(textToReplace.Replace("=", "Cap="))) {
+            if (text.Contains(textToReplace) || text.Contains(textToReplace.Replace("=", "Cap=")))
+            {
                 aliasInfos.overriden = true;
                 text = text.Replace(textToReplace, "<Alias.Race=" + aliasName + ">");
                 text = text.Replace(textToReplace.Replace("=", "Cap="), "<Alias.RaceCap=" + aliasName + ">");
@@ -180,68 +178,69 @@ namespace GenderDialoguePatch
                     foreach (var condition in responses.Conditions)
                     {
                         if (condition.Data == null) continue;
-                        var conditionFunction = (FunctionConditionData)condition.Data;
-                        if (conditionFunction.Function == Condition.Function.GetPCIsSex)
+                        if (condition.Data is GetPCIsSexConditionData)
                         {
-                            if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            GetPCIsSexConditionData? conditionData = condition.Data as GetPCIsSexConditionData ?? throw new Exception();
+                            if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                             {
                                 responses.Conditions.Remove(condition);
                                 responses.Conditions.Insert(index, new ConditionFloat()
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetGlobalValueConditionData()
                                     {
-                                        Function = Condition.Function.GetGlobalValue,
-                                        ParameterOneRecord = Female
+                                        RunOnType = Condition.RunOnType.Subject,
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                     }
                                 });
                             }
-                            else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            else if (((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo)))
                             {
                                 responses.Conditions.Remove(condition);
                                 responses.Conditions.Insert(index, new ConditionFloat()
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetGlobalValueConditionData()
                                     {
-                                        Function = Condition.Function.GetGlobalValue,
-                                        ParameterOneRecord = Male
+                                        RunOnType = Condition.RunOnType.Subject,
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                     }
                                 });
                             }
                             break;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                        else if (condition.Data is GetIsSexConditionData && condition.Data.RunOnType != Condition.RunOnType.Subject)
                         {
-                            if (conditionFunction.Reference.FormKey == Constants.Player.FormKey)
+                            GetIsSexConditionData? conditionData = condition.Data as GetIsSexConditionData ?? throw new Exception();
+                            if (conditionData.Reference.FormKey == Constants.Player.FormKey)
                             {
-                                if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Female
+                                            RunOnType = conditionData.RunOnType,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                         }
                                     });
                                 }
-                                else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                else if ((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Male
+                                            RunOnType = conditionData.RunOnType,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                         }
                                     });
                                 }
@@ -252,11 +251,10 @@ namespace GenderDialoguePatch
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 0,
-                                    Data = new FunctionConditionData()
+                                    Data = new HasKeywordConditionData()
                                     {
-                                        Function = Condition.Function.HasKeyword,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = NpcNonBinary,
+                                        RunOnType = conditionData.RunOnType,
+                                        Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey)
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // is player
@@ -264,35 +262,33 @@ namespace GenderDialoguePatch
                                     Flags = Condition.Flag.OR,
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetIsIDConditionData()
                                     {
-                                        Function = Condition.Function.GetIsID,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = Skyrim.Npc.Player,
+                                        RunOnType = conditionData.RunOnType,
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // not player
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 0,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetIsIDConditionData()
                                     {
-                                        Function = Condition.Function.GetIsID,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = Skyrim.Npc.Player
+                                        RunOnType = conditionData.RunOnType,
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
                                     }
                                 });
-                                if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Female
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                         }
                                     });
                                 }
@@ -303,10 +299,10 @@ namespace GenderDialoguePatch
                                         Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Male
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                         }
                                     });
                                 }
@@ -398,7 +394,7 @@ namespace GenderDialoguePatch
                     if (book == null) continue;
                     string text = book.BookText.ToString();
                     if (text == null) continue;
-                    
+
                     text = TryCreateAlias("<Alias.Pronoun=Player>'s", "they've", FormKey.Factory("0008F0:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.Pronoun=Player> is", "they are", FormKey.Factory("0008F2:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.Pronoun=Player> reaches", "they reach", FormKey.Factory("0008F4:Gender-Neutral Dialogue.esp"), questInfo, text);
