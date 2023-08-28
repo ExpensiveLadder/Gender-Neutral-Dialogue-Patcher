@@ -32,10 +32,6 @@ namespace GenderDialoguePatch
 
         [SettingName("Reflexive")]
         public string CustomPronoun_Reflexive = "themself";
-
-        [SettingName("")]
-        [Tooltip("")]
-        public bool CustomPronoun_IsPlural = false;
     }
 
     public class QuestInfo
@@ -345,22 +341,22 @@ namespace GenderDialoguePatch
             if (Settings.Value.PatchCustomPronouns)
             {
                 var theyve = FormKey.Factory("000B73:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theyve.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " 've" : " 's");
+                theyve.Name = Settings.Value.CustomPronoun_Nominative + " 's";
                 state.PatchMod.Races.Set(theyve);
                 var theyare = FormKey.Factory("000B6F:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theyare.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " are" : " is");
+                theyare.Name = Settings.Value.CustomPronoun_Nominative + " is";
                 state.PatchMod.Races.Set(theyare);
                 var theycall = FormKey.Factory("000B70:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theycall.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " calls" : " call");
+                theycall.Name = Settings.Value.CustomPronoun_Nominative + " call";
                 state.PatchMod.Races.Set(theycall);
                 var theyreach = FormKey.Factory("000B72:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theyreach.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " reaches" : " reach");
+                theyreach.Name = Settings.Value.CustomPronoun_Nominative + " reach";
                 state.PatchMod.Races.Set(theyreach);
                 var theywere = FormKey.Factory("000B74:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theywere.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " were" : " was");
+                theywere.Name = Settings.Value.CustomPronoun_Nominative + " was";
                 state.PatchMod.Races.Set(theywere);
                 var theydo = FormKey.Factory("000B71:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
-                theydo.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " does" : " do");
+                theydo.Name = Settings.Value.CustomPronoun_Nominative + " do";
                 state.PatchMod.Races.Set(theydo);
                 var they = FormKey.Factory("000B6E:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
                 they.Name = Settings.Value.CustomPronoun_Nominative;
