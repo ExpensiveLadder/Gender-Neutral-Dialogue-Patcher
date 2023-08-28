@@ -32,6 +32,10 @@ namespace GenderDialoguePatch
 
         [SettingName("Reflexive")]
         public string CustomPronoun_Reflexive = "themself";
+
+        [SettingName("")]
+        [Tooltip("")]
+        public bool CustomPronoun_IsPlural = false;
     }
 
     public class QuestInfo
@@ -119,11 +123,12 @@ namespace GenderDialoguePatch
             return false;
         }
 
-        public static string TryCreateAlias(string textToReplace, string aliasName, FormKey reference, QuestInfo aliasInfos, string text)
+        public static string TryCreateAlias(string textToReplace, string aliasName,FormKey reference, QuestInfo aliasInfos, string text)
         {
-            if (text.Contains(textToReplace)) {
+            if (text.Contains(textToReplace) || text.Contains(textToReplace.Replace("=", "Cap="))) {
                 aliasInfos.overriden = true;
                 text = text.Replace(textToReplace, "<Alias.Race=" + aliasName + ">");
+                text = text.Replace(textToReplace.Replace("=", "Cap="), "<Alias.RaceCap=" + aliasName + ">");
                 if (!aliasInfos.aliases.Any(alias => alias.Name == aliasName))
                 {
                     aliasInfos.aliases.Add(new QuestAlias()
@@ -337,6 +342,43 @@ namespace GenderDialoguePatch
                 }
             }
 
+            if (Settings.Value.PatchCustomPronouns)
+            {
+                var theyve = FormKey.Factory("000B73:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyve.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " 've" : " 's");
+                state.PatchMod.Races.Set(theyve);
+                var theyare = FormKey.Factory("000B6F:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyare.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " are" : " is");
+                state.PatchMod.Races.Set(theyare);
+                var theycall = FormKey.Factory("000B70:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theycall.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " calls" : " call");
+                state.PatchMod.Races.Set(theycall);
+                var theyreach = FormKey.Factory("000B72:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyreach.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " reaches" : " reach");
+                state.PatchMod.Races.Set(theyreach);
+                var theywere = FormKey.Factory("000B74:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theywere.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " were" : " was");
+                state.PatchMod.Races.Set(theywere);
+                var theydo = FormKey.Factory("000B71:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theydo.Name = Settings.Value.CustomPronoun_Nominative + (Settings.Value.CustomPronoun_IsPlural ? " does" : " do");
+                state.PatchMod.Races.Set(theydo);
+                var they = FormKey.Factory("000B6E:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                they.Name = Settings.Value.CustomPronoun_Nominative;
+                state.PatchMod.Races.Set(they);
+                var them = FormKey.Factory("000B74:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                them.Name = Settings.Value.CustomPronoun_Accusative;
+                state.PatchMod.Races.Set(them);
+                var their = FormKey.Factory("000B6A:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                their.Name = Settings.Value.CustomPronoun_PronominalPossessive;
+                state.PatchMod.Races.Set(their);
+                var theirs = FormKey.Factory("000B6B:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theirs.Name = Settings.Value.CustomPronoun_PredicativePossessive;
+                state.PatchMod.Races.Set(theirs);
+                var themself = FormKey.Factory("000B6D:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                themself.Name = Settings.Value.CustomPronoun_Reflexive;
+                state.PatchMod.Races.Set(themself);
+            }
+
             foreach (var questGetter in state.LoadOrder.PriorityOrder.Quest().WinningOverrides())
             {
                 QuestInfo questInfo = new();
@@ -349,8 +391,9 @@ namespace GenderDialoguePatch
                 questInfo.nextAliasID++;
                 foreach (var aliasGetter in questGetter.Aliases)
                 {
-                    Book? book = null;
+                    if (aliasGetter.Flags == null || !aliasGetter.Flags.Value.HasFlag(QuestAlias.Flag.UsesStoredText)) continue;
                     if (aliasGetter.CreateReferenceToObject == null) continue;
+                    Book? book = null;
                     if (aliasGetter.CreateReferenceToObject.Object.TryResolve<IBookGetter>(state.LinkCache, out var bookGetter))
                     {
                         if (bookGetter.Teaches is BookSpell) continue;
@@ -360,32 +403,18 @@ namespace GenderDialoguePatch
                     string text = book.BookText.ToString();
                     if (text == null) continue;
                     
-                    /*
-                    text = TryCreateAlias("<Alias.Pronoun=Player>'s", "they've", FormKey.Factory("0008C9:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player>'s", "They've", FormKey.Factory("000B53:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player> is", "they are", FormKey.Factory("000FD6:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player> is", "They are", FormKey.Factory("0008CB:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player> reaches", "they reach", FormKey.Factory("0008D2:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player> reaches", "They reach", FormKey.Factory("0008D3:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player> does", "they do", FormKey.Factory("0008CF:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player> does", "They do", FormKey.Factory("0008D0:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player> calls", "they call", FormKey.Factory("0008CD:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player> calls", "They call", FormKey.Factory("0008CE:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.Pronoun=Player> was", "they were", FormKey.Factory("000FD7:Gender-Neutral Dialogue.esp"), aliases, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player> was", "They were", FormKey.Factory("0008CA:Gender-Neutral Dialogue.esp"), aliases, text);
-                    */
+                    text = TryCreateAlias("<Alias.Pronoun=Player>'s", "they've", FormKey.Factory("0008F0:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> is", "they are", FormKey.Factory("0008F2:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> reaches", "they reach", FormKey.Factory("0008F4:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> does", "they do", FormKey.Factory("0008F6:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> calls", "they call", FormKey.Factory("0008F8:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> was", "they were", FormKey.Factory("0008FA:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.Pronoun=Player>", "they", FormKey.Factory("000F24:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounCap=Player>", "They", FormKey.Factory("000F25:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.PronounPosObj=Player>", "their", FormKey.Factory("000F26:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounPosObjCap=Player>", "Their", FormKey.Factory("000F27:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.PronounPos=Player>", "theirs", FormKey.Factory("000F28:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounPosCap=Player>", "Theirs", FormKey.Factory("000F29:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.PronounObj=Player>", "them", FormKey.Factory("000F30:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounObjCap=Player>", "Them", FormKey.Factory("000F31:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.PronounInt=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounIntCap=Player>", "Themself", FormKey.Factory("000FCF:Gender-Neutral Dialogue.esp"), questInfo, text);
                     text = TryCreateAlias("<Alias.PronounRef=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
-                    text = TryCreateAlias("<Alias.PronounRefCap=Player>", "Themself", FormKey.Factory("000FCF:Gender-Neutral Dialogue.esp"), questInfo, text);
 
                     if (questInfo.overriden)
                     {
