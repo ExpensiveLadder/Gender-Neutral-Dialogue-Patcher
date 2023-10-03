@@ -1,21 +1,21 @@
+using DynamicData;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.FormKeys.SkyrimSE;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using Mutagen.Bethesda.WPF.Reflection.Attributes;
+using Mutagen.Bethesda.Plugins.Records;
 using Noggog;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace GenderDialoguePatch
 {
     public class TestSettings
     {
-        [SettingName("Patch Book Text")]
-        [Tooltip("Patches book text to refer to the player using they/them, or custom pronouns if they are enabled")]
-        public bool PatchBookText = true;
-
         [SettingName("Custom Pronouns")]
         public bool PatchCustomPronouns = false;
 
@@ -33,6 +33,15 @@ namespace GenderDialoguePatch
 
         [SettingName("Reflexive")]
         public string CustomPronoun_Reflexive = "themself";
+    }
+
+    public class QuestInfo
+    {
+        public uint nextAliasID = 0;
+        public List<QuestAlias> aliases = new();
+        public bool overriden = false;
+        public QuestAdapter scripts = new();
+        public IFormLink<IQuestGetter> quest = new FormLink<IQuestGetter>();
     }
 
     public class Program
@@ -70,16 +79,16 @@ namespace GenderDialoguePatch
                 {
                     if (condition.Data != null)
                     {
-                        var conditionFunction = (FunctionConditionData)condition.Data.DeepCopy();
-                        if (conditionFunction.Function == Condition.Function.HasKeyword)
+                        if (condition.Data is HasKeywordConditionData)
                         {
-                            if (conditionFunction.ParameterOneRecord.FormKey.GetHashCode() == NpcNonBinary.FormKey.GetHashCode()) return false;
+                            HasKeywordConditionData? conditionData = condition.Data as HasKeywordConditionData ?? throw new Exception();
+                            if (conditionData.Keyword.Link.FormKey.GetHashCode() == NpcNonBinary.FormKey.GetHashCode()) return false;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetPCIsSex)
+                        else if (condition.Data is GetPCIsSexConditionData)
                         {
                             returnTrue = true;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                        else if (condition.Data is GetIsSexConditionData && condition.Data.RunOnType != Condition.RunOnType.Subject)
                         {
                             returnTrue = true;
                         }
@@ -95,20 +104,55 @@ namespace GenderDialoguePatch
             {
                 foreach (var condition in response.Conditions)
                 {
-                    if (condition.Data != null)
+                    if (condition.Data != null && condition.Data is GetGlobalValueConditionData)
                     {
-                        var conditionFunction = (FunctionConditionData)condition.Data.DeepCopy();
-                        if (conditionFunction.Function == Condition.Function.GetGlobalValue)
-                        {
-                            if (conditionFunction.ParameterOneRecord.FormKey == CustomPronouns.FormKey)
-                            {
-                                return true;
-                            }
+                        GetGlobalValueConditionData? conditionData = condition.Data as GetGlobalValueConditionData ?? throw new Exception();
+                        if (conditionData.Global.Link.FormKey == CustomPronouns.FormKey) {
+                            return true;
                         }
                     }
                 }
             }
             return false;
+        }
+
+        public static string TryCreateAlias(string textToReplace, string aliasName, FormKey reference, QuestInfo aliasInfos, string text)
+        {
+            if (text.Contains(textToReplace) || text.Contains(textToReplace.Replace("=", "Cap=")))
+            {
+                aliasInfos.overriden = true;
+                text = text.Replace(textToReplace, "<Alias.Race=" + aliasName + ">");
+                text = text.Replace(textToReplace.Replace("=", "Cap="), "<Alias.RaceCap=" + aliasName + ">");
+                if (!aliasInfos.aliases.Any(alias => alias.Name == aliasName))
+                {
+                    aliasInfos.aliases.Add(new QuestAlias()
+                    {
+                        Name = aliasName,
+                        ForcedReference = reference.ToNullableLink<IPlacedGetter>(),
+                        Flags = QuestAlias.Flag.StoresText,
+                        ID = aliasInfos.nextAliasID
+                    });
+                    aliasInfos.scripts.Scripts.Add(new ScriptEntry()
+                    {
+                        Flags = ScriptEntry.Flag.Local,
+                        Name = "GenderNeutralDialogueQuestAlias",
+                        Properties = new() {
+                            new ScriptObjectProperty() {
+                                Name = "forceref",
+                                Flags = ScriptProperty.Flag.Edited,
+                                Object = reference.ToLink<IPlacedGetter>()
+                            },
+                            new ScriptIntProperty() {
+                                Name = "index",
+                                Flags = ScriptProperty.Flag.Edited,
+                                Data = (short)aliasInfos.nextAliasID
+                            },
+                        }
+                    });
+                    aliasInfos.nextAliasID++;
+                }
+            }
+            return text;
         }
 
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
@@ -134,68 +178,69 @@ namespace GenderDialoguePatch
                     foreach (var condition in responses.Conditions)
                     {
                         if (condition.Data == null) continue;
-                        var conditionFunction = (FunctionConditionData)condition.Data;
-                        if (conditionFunction.Function == Condition.Function.GetPCIsSex)
+                        if (condition.Data is GetPCIsSexConditionData)
                         {
-                            if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            GetPCIsSexConditionData? conditionData = condition.Data as GetPCIsSexConditionData ?? throw new Exception();
+                            if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                             {
                                 responses.Conditions.Remove(condition);
                                 responses.Conditions.Insert(index, new ConditionFloat()
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetGlobalValueConditionData()
                                     {
-                                        Function = Condition.Function.GetGlobalValue,
-                                        ParameterOneRecord = Female
+                                        RunOnType = Condition.RunOnType.Subject,
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                     }
                                 });
                             }
-                            else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                            else if (((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo)))
                             {
                                 responses.Conditions.Remove(condition);
                                 responses.Conditions.Insert(index, new ConditionFloat()
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetGlobalValueConditionData()
                                     {
-                                        Function = Condition.Function.GetGlobalValue,
-                                        ParameterOneRecord = Male
+                                        RunOnType = Condition.RunOnType.Subject,
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                     }
                                 });
                             }
                             break;
                         }
-                        else if (conditionFunction.Function == Condition.Function.GetIsSex && conditionFunction.RunOnType != Condition.RunOnType.Subject)
+                        else if (condition.Data is GetIsSexConditionData && condition.Data.RunOnType != Condition.RunOnType.Subject)
                         {
-                            if (conditionFunction.Reference.FormKey == Constants.Player.FormKey)
+                            GetIsSexConditionData? conditionData = condition.Data as GetIsSexConditionData ?? throw new Exception();
+                            if (conditionData.Reference.FormKey == Constants.Player.FormKey)
                             {
-                                if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Female
+                                            RunOnType = conditionData.RunOnType,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                         }
                                     });
                                 }
-                                else if ((conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                else if ((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Remove(condition);
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Male
+                                            RunOnType = conditionData.RunOnType,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                         }
                                     });
                                 }
@@ -206,11 +251,10 @@ namespace GenderDialoguePatch
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 0,
-                                    Data = new FunctionConditionData()
+                                    Data = new HasKeywordConditionData()
                                     {
-                                        Function = Condition.Function.HasKeyword,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = NpcNonBinary,
+                                        RunOnType = conditionData.RunOnType,
+                                        Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey)
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // is player
@@ -218,35 +262,33 @@ namespace GenderDialoguePatch
                                     Flags = Condition.Flag.OR,
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 1,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetIsIDConditionData()
                                     {
-                                        Function = Condition.Function.GetIsID,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = Skyrim.Npc.Player,
+                                        RunOnType = conditionData.RunOnType,
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // not player
                                 {
                                     CompareOperator = CompareOperator.EqualTo,
                                     ComparisonValue = 0,
-                                    Data = new FunctionConditionData()
+                                    Data = new GetIsIDConditionData()
                                     {
-                                        Function = Condition.Function.GetIsID,
-                                        RunOnType = conditionFunction.RunOnType,
-                                        ParameterOneRecord = Skyrim.Npc.Player
+                                        RunOnType = conditionData.RunOnType,
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
                                     }
                                 });
-                                if ((conditionFunction.ParameterOneNumber == 0 && condition.CompareOperator == CompareOperator.EqualTo) || (conditionFunction.ParameterOneNumber == 1 && condition.CompareOperator == CompareOperator.NotEqualTo))
+                                if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
                                 {
                                     responses.Conditions.Insert(index, new ConditionFloat()
                                     {
                                         Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Female
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
                                         }
                                     });
                                 }
@@ -257,10 +299,10 @@ namespace GenderDialoguePatch
                                         Flags = Condition.Flag.OR,
                                         CompareOperator = CompareOperator.EqualTo,
                                         ComparisonValue = 1,
-                                        Data = new FunctionConditionData()
+                                        Data = new GetGlobalValueConditionData()
                                         {
-                                            Function = Condition.Function.GetGlobalValue,
-                                            ParameterOneRecord = Male
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
                                         }
                                     });
                                 }
@@ -292,62 +334,93 @@ namespace GenderDialoguePatch
                 }
             }
 
-            if (Settings.Value.PatchBookText)
+            if (Settings.Value.PatchCustomPronouns)
             {
-                foreach (var item in state.LoadOrder.PriorityOrder.Book().WinningContextOverrides())
+                var theyve = FormKey.Factory("000B73:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyve.Name = Settings.Value.CustomPronoun_Nominative + " 's";
+                state.PatchMod.Races.Set(theyve);
+                var theyare = FormKey.Factory("000B6F:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyare.Name = Settings.Value.CustomPronoun_Nominative + " is";
+                state.PatchMod.Races.Set(theyare);
+                var theycall = FormKey.Factory("000B70:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theycall.Name = Settings.Value.CustomPronoun_Nominative + " call";
+                state.PatchMod.Races.Set(theycall);
+                var theyreach = FormKey.Factory("000B72:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theyreach.Name = Settings.Value.CustomPronoun_Nominative + " reach";
+                state.PatchMod.Races.Set(theyreach);
+                var theywere = FormKey.Factory("000B74:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theywere.Name = Settings.Value.CustomPronoun_Nominative + " was";
+                state.PatchMod.Races.Set(theywere);
+                var theydo = FormKey.Factory("000B71:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theydo.Name = Settings.Value.CustomPronoun_Nominative + " do";
+                state.PatchMod.Races.Set(theydo);
+                var they = FormKey.Factory("000B6E:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                they.Name = Settings.Value.CustomPronoun_Nominative;
+                state.PatchMod.Races.Set(they);
+                var them = FormKey.Factory("000B74:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                them.Name = Settings.Value.CustomPronoun_Accusative;
+                state.PatchMod.Races.Set(them);
+                var their = FormKey.Factory("000B6A:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                their.Name = Settings.Value.CustomPronoun_PronominalPossessive;
+                state.PatchMod.Races.Set(their);
+                var theirs = FormKey.Factory("000B6B:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                theirs.Name = Settings.Value.CustomPronoun_PredicativePossessive;
+                state.PatchMod.Races.Set(theirs);
+                var themself = FormKey.Factory("000B6D:Gender-Neutral Dialogue.esp").ToLink<IRaceGetter>().Resolve(state.LinkCache).DeepCopy();
+                themself.Name = Settings.Value.CustomPronoun_Reflexive;
+                state.PatchMod.Races.Set(themself);
+            }
+
+            foreach (var questGetter in state.LoadOrder.PriorityOrder.Quest().WinningOverrides())
+            {
+                QuestInfo questInfo = new();
+                if (questGetter.VirtualMachineAdapter != null) questInfo.scripts = questGetter.VirtualMachineAdapter.DeepCopy();
+                questInfo.quest = questGetter.ToLink();
+                foreach (var aliasGetter in questGetter.Aliases)
                 {
-                    var text = item.Record.BookText.ToString();
-                    if (text == null) continue;
-                    if (text.Contains("<Alias.Pronoun=Player>") || text.Contains("<Alias.PronounObj=Player>") || text.Contains("<Alias.PronounPos=Player>") || text.Contains("<Alias.PronounPosObj=Player>") || text.Contains("<Alias.PronounRef=Player>") || text.Contains("<Alias.PronounInt=Player>") || text.Contains("<Alias.PronounCap=Player>") || text.Contains("<Alias.PronounObjCap=Player>") || text.Contains("<Alias.PronounPosCap=Player>") || text.Contains("<Alias.PronounPosObjCap=Player>") || text.Contains("<Alias.PronounRefCap=Player>") || text.Contains("<Alias.PronounIntCap=Player>"))
+                    if (aliasGetter.ID > questInfo.nextAliasID) questInfo.nextAliasID = aliasGetter.ID;
+                }
+                questInfo.nextAliasID++;
+                foreach (var aliasGetter in questGetter.Aliases)
+                {
+                    if (aliasGetter.Flags == null || !aliasGetter.Flags.Value.HasFlag(QuestAlias.Flag.UsesStoredText)) continue;
+                    if (aliasGetter.CreateReferenceToObject == null) continue;
+                    Book? book = null;
+                    if (aliasGetter.CreateReferenceToObject.Object.TryResolve<IBookGetter>(state.LinkCache, out var bookGetter))
                     {
-                        var book = item.GetOrAddAsOverride(state.PatchMod);
-
-                        if (Settings.Value.PatchCustomPronouns)
-                        {
-                            text = text.Replace("<Alias.Pronoun=Player>", Settings.Value.CustomPronoun_Nominative);
-                            text = text.Replace("<Alias.PronounCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Nominative));
-                            text = text.Replace("<Alias.PronounObj=Player>", Settings.Value.CustomPronoun_Accusative);
-                            text = text.Replace("<Alias.PronounObjCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Accusative));
-                            text = text.Replace("<Alias.PronounPosObj=Player>", Settings.Value.CustomPronoun_PronominalPossessive);
-                            text = text.Replace("<Alias.PronounPosObjCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_PronominalPossessive));
-                            text = text.Replace("<Alias.PronounPos=Player>", Settings.Value.CustomPronoun_PredicativePossessive);
-                            text = text.Replace("<Alias.PronounPosCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_PredicativePossessive));
-                            text = text.Replace("<Alias.PronounRef=Player>", Settings.Value.CustomPronoun_Reflexive);
-                            text = text.Replace("<Alias.PronounRefCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Reflexive));
-                            text = text.Replace("<Alias.PronounInt=Player>", Settings.Value.CustomPronoun_Reflexive);
-                            text = text.Replace("<Alias.PronounIntCap=Player>", CapatalizeFirst(Settings.Value.CustomPronoun_Reflexive));
-                        }
-                        else
-                        {
-                            text = text.Replace("<Alias.Pronoun=Player> is", "they are");
-                            text = text.Replace("<Alias.PronounCap=Player> is", "They are");
-                            text = text.Replace("<Alias.Pronoun=Player> was", "they were");
-                            text = text.Replace("<Alias.PronounCap=Player> was", "They were");
-                            text = text.Replace("<Alias.Pronoun=Player> reaches", "they reach");
-                            text = text.Replace("<Alias.PronounCap=Player> reaches", "They reach");
-                            text = text.Replace("<Alias.Pronoun=Player> calls", "they call");
-                            text = text.Replace("<Alias.PronounCap=Player> calls", "They call");
-                            text = text.Replace("<Alias.Pronoun=Player> does", "they do");
-                            text = text.Replace("<Alias.PronounCap=Player> does", "They do");
-                            text = text.Replace("<Alias.Pronoun=Player>'s", "they've");
-                            text = text.Replace("<Alias.PronounCap=Player>'s", "They've");
-                            text = text.Replace("<Alias.Pronoun=Player>", "they");
-                            text = text.Replace("<Alias.PronounCap=Player>", "They");
-                            text = text.Replace("<Alias.PronounObj=Player>", "them");
-                            text = text.Replace("<Alias.PronounObjCap=Player>", "Them");
-                            text = text.Replace("<Alias.PronounPosObj=Player>", "their");
-                            text = text.Replace("<Alias.PronounPosObjCap=Player>", "Their");
-                            text = text.Replace("<Alias.PronounPos=Player>", "theirs");
-                            text = text.Replace("<Alias.PronounPosCap=Player>", "Theirs");
-                            text = text.Replace("<Alias.PronounRef=Player>", "themself");
-                            text = text.Replace("<Alias.PronounRefCap=Player>", "Themself");
-                            text = text.Replace("<Alias.PronounInt=Player>", "themself");
-                            text = text.Replace("<Alias.PronounIntCap=Player>", "Themself");
-                        }
-
-                        book.BookText = text;
-                        Console.WriteLine(item.ModKey.FileName + " " + book.FormKey + " " + book.EditorID + System.Environment.NewLine + text);
+                        if (bookGetter.Teaches is BookSpell) continue;
+                        book = bookGetter.DeepCopy();
                     }
+                    if (book == null) continue;
+                    string text = book.BookText.ToString();
+                    if (text == null) continue;
+
+                    text = TryCreateAlias("<Alias.Pronoun=Player>'s", "they've", FormKey.Factory("0008F0:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> is", "they are", FormKey.Factory("0008F2:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> reaches", "they reach", FormKey.Factory("0008F4:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> does", "they do", FormKey.Factory("0008F6:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> calls", "they call", FormKey.Factory("0008F8:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player> was", "they were", FormKey.Factory("0008FA:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.Pronoun=Player>", "they", FormKey.Factory("000F24:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPosObj=Player>", "their", FormKey.Factory("000F26:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounPos=Player>", "theirs", FormKey.Factory("000F28:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounObj=Player>", "them", FormKey.Factory("000F30:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounInt=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
+                    text = TryCreateAlias("<Alias.PronounRef=Player>", "themself", FormKey.Factory("000FC4:Gender-Neutral Dialogue.esp"), questInfo, text);
+
+                    if (questInfo.overriden)
+                    {
+                        book.BookText = text;
+                        state.PatchMod.Books.Set(book);
+                        Console.WriteLine(Environment.NewLine + /*book.ModKey.FileName + " " + */book.FormKey + " " + book.EditorID + Environment.NewLine + text);
+                    }
+                }
+                if (questInfo.overriden)
+                {
+                    var quest = questGetter.DeepCopy();
+                    quest.Aliases.Add(questInfo.aliases);
+                    quest.VirtualMachineAdapter = questInfo.scripts;
+                    state.PatchMod.Quests.Set(quest);
                 }
             }
         }
