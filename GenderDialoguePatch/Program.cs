@@ -168,6 +168,13 @@ namespace GenderDialoguePatch
                     if (responses.Responses.TryGet(0, out var output))
                     {
                         responsetext = output.Text;
+                    } 
+                    else if (!responses.ResponseData.IsNull) 
+                    {
+                        if (responses.ResponseData.Resolve(state.LinkCache).Responses.TryGet(0, out var output2))
+                        {
+                            responsetext = output2.Text.ToString();
+                        }
                     }
                     Console.WriteLine(item.ModKey.FileName + " " + responses.FormKey + " " + responsetext);
 
@@ -191,7 +198,8 @@ namespace GenderDialoguePatch
                                     Data = new GetGlobalValueConditionData()
                                     {
                                         RunOnType = Condition.RunOnType.Subject,
-                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
+                                        Unknown3 = condition.Data.Unknown3
                                     }
                                 });
                             }
@@ -205,7 +213,8 @@ namespace GenderDialoguePatch
                                     Data = new GetGlobalValueConditionData()
                                     {
                                         RunOnType = Condition.RunOnType.Subject,
-                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
+                                        Unknown3 = condition.Data.Unknown3
                                     }
                                 });
                             }
@@ -226,7 +235,8 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = conditionData.RunOnType,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
                                         }
                                     });
                                 }
@@ -240,7 +250,8 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = conditionData.RunOnType,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
                                         }
                                     });
                                 }
@@ -254,7 +265,8 @@ namespace GenderDialoguePatch
                                     Data = new HasKeywordConditionData()
                                     {
                                         RunOnType = conditionData.RunOnType,
-                                        Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey)
+                                        Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey),
+                                        Unknown3 = condition.Data.Unknown3
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // is player
@@ -265,7 +277,8 @@ namespace GenderDialoguePatch
                                     Data = new GetIsIDConditionData()
                                     {
                                         RunOnType = conditionData.RunOnType,
-                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey),
+                                        Unknown3 = condition.Data.Unknown3
                                     }
                                 });
                                 responses.Conditions.Insert(index, new ConditionFloat() // not player
@@ -275,7 +288,8 @@ namespace GenderDialoguePatch
                                     Data = new GetIsIDConditionData()
                                     {
                                         RunOnType = conditionData.RunOnType,
-                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey)
+                                        Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey),
+                                        Unknown3 = condition.Data.Unknown3
                                     }
                                 });
                                 if ((conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.NotEqualTo))
@@ -288,7 +302,8 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = Condition.RunOnType.Subject,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey)
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
                                         }
                                     });
                                 }
@@ -302,7 +317,8 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = Condition.RunOnType.Subject,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey)
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
                                         }
                                     });
                                 }
