@@ -16,6 +16,9 @@ namespace GenderDialoguePatch
 {
     public class TestSettings
     {
+        [SettingName("Dummy Diaogue Text")]
+        public string DummyDialogueText = "...";
+
         [SettingName("Custom Pronouns")]
         public bool PatchCustomPronouns = false;
 
@@ -65,8 +68,9 @@ namespace GenderDialoguePatch
                 .Run(args);
         }
 
-        public static readonly FormLink<Global> Male = FormKey.Factory("000F48:Gender-Neutral Dialogue.esp").ToLink<Global>();
-        public static readonly FormLink<Global> Female = FormKey.Factory("000F49:Gender-Neutral Dialogue.esp").ToLink<Global>();
+        public static readonly FormLink<Global> FallbackMale = FormKey.Factory("000F48:Gender-Neutral Dialogue.esp").ToLink<Global>();
+        public static readonly FormLink<Global> FallbackFemale = FormKey.Factory("000F49:Gender-Neutral Dialogue.esp").ToLink<Global>();
+        public static readonly FormLink<Global> FallbackNone = FormKey.Factory("000E28:Gender-Neutral Dialogue.esp").ToLink<Global>();
         public static readonly FormLink<Keyword> NpcNonBinary = FormKey.Factory("EBDA00:Update.esm").ToLink<Keyword>();
         public static readonly FormLink<GlobalShort> CustomPronouns = FormKey.Factory("000F4A:Gender-Neutral Dialogue.esp").ToLink<GlobalShort>();
 
@@ -154,7 +158,14 @@ namespace GenderDialoguePatch
             }
             return text;
         }
-
+        public static bool ShouldCreateDummyDialogue(IDialogResponsesGetter responses)
+        {
+            if (responses.Flags == null || !responses.Flags.Flags.HasFlag(DialogResponses.Flag.Random)) {
+                return true;
+            } else {
+                return false;
+            }
+        }
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
             //Your code here!
@@ -178,11 +189,116 @@ namespace GenderDialoguePatch
                     }
                     Console.WriteLine(item.ModKey.FileName + " " + responses.FormKey + " " + responsetext);
 
-                    responses.Flags ??= new();
-                    responses.Flags.Flags |= DialogResponses.Flag.Random;
+                    // Create Dummy Dialogue
+                    if (ShouldCreateDummyDialogue(responses))
+                    {
+                        var dummydialogue = item.DuplicateIntoAsNewRecord(state.PatchMod);
+                        responses.Flags ??= new();
+                        responses.Flags.Flags |= DialogResponses.Flag.Random;
 
+                        foreach (var response in dummydialogue.Responses) {
+                            response.Text = Settings.Value.DummyDialogueText;
+                        }
+
+                        // Dummy Dialogue Conditions
+                        var ddindex = 0;
+                        foreach (var condition in dummydialogue.Conditions) {
+                            if (condition.Data == null) continue;
+                            if (condition.Data is GetPCIsSexConditionData)
+                            {
+                                GetPCIsSexConditionData? conditionData = condition.Data as GetPCIsSexConditionData ?? throw new Exception();
+                                dummydialogue.Conditions.Insert(ddindex, new ConditionFloat()
+                                {
+                                    CompareOperator = CompareOperator.EqualTo,
+                                    ComparisonValue = 1,
+                                    Data = new GetGlobalValueConditionData()
+                                    {
+                                        RunOnType = Condition.RunOnType.Subject,
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackNone.FormKey)
+                                    }
+                                });
+                                break;
+                            }
+                            else if (condition.Data is GetIsSexConditionData && condition.Data.RunOnType != Condition.RunOnType.Subject)
+                            {
+                                GetIsSexConditionData? conditionData = condition.Data as GetIsSexConditionData ?? throw new Exception();
+                                if (conditionData.Reference.FormKey == Constants.Player.FormKey)
+                                {
+                                    dummydialogue.Conditions.Insert(ddindex, new ConditionFloat()
+                                    {
+                                        CompareOperator = CompareOperator.EqualTo,
+                                        ComparisonValue = 1,
+                                        Data = new GetGlobalValueConditionData()
+                                        {
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackNone.FormKey),
+                                        }
+                                    });
+                                }
+                                else
+                                {
+                                    dummydialogue.Conditions.Insert(ddindex + 1, new ConditionFloat()
+                                    {
+                                        CompareOperator = CompareOperator.EqualTo,
+                                        ComparisonValue = 1,
+                                        Data = new HasKeywordConditionData()
+                                        {
+                                            RunOnType = conditionData.RunOnType,
+                                            Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
+                                        }
+                                    });
+                                    dummydialogue.Conditions.Insert(ddindex, new ConditionFloat() // is player
+                                    {
+                                        Flags = Condition.Flag.OR,
+                                        CompareOperator = CompareOperator.EqualTo,
+                                        ComparisonValue = 1,
+                                        Data = new GetIsIDConditionData()
+                                        {
+                                            RunOnType = conditionData.RunOnType,
+                                            Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
+                                        }
+                                    });
+                                    dummydialogue.Conditions.Insert(ddindex, new ConditionFloat() // not player
+                                    {
+                                        CompareOperator = CompareOperator.EqualTo,
+                                        ComparisonValue = 0,
+                                        Data = new GetIsIDConditionData()
+                                        {
+                                            RunOnType = conditionData.RunOnType,
+                                            Object = new FormLinkOrIndex<IReferenceableObjectGetter>(new GetIsIDConditionData(), Skyrim.Npc.Player.FormKey),
+                                            Unknown3 = condition.Data.Unknown3
+                                        }
+                                    });
+
+                                    dummydialogue.Conditions.Insert(ddindex, new ConditionFloat()
+                                    {
+                                        Flags = Condition.Flag.OR,
+                                        CompareOperator = CompareOperator.EqualTo,
+                                        ComparisonValue = 1,
+                                        Data = new GetGlobalValueConditionData()
+                                        {
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackNone.FormKey),
+                                        }
+                                    });
+                                }
+                                break;
+                            }
+                            ddindex++;
+                        }
+                    }
+                    
+                    if (responses.Flags == null || !responses.Flags.Flags.HasFlag(DialogResponses.Flag.Random))
+                    {
+                        responses.Flags ??= new();
+                        responses.Flags.Flags |= DialogResponses.Flag.Random;
+                    }
+
+                    // Edit Conditions
                     var index = 0;
-                    foreach (var condition in responses.Conditions)
+                    foreach (var condition in responses.Conditions) 
                     {
                         if (condition.Data == null) continue;
                         if (condition.Data is GetPCIsSexConditionData)
@@ -198,12 +314,11 @@ namespace GenderDialoguePatch
                                     Data = new GetGlobalValueConditionData()
                                     {
                                         RunOnType = Condition.RunOnType.Subject,
-                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
-                                        Unknown3 = condition.Data.Unknown3
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackFemale.FormKey),
                                     }
                                 });
                             }
-                            else if (((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo)))
+                            else if ((conditionData.MaleFemaleGender == MaleFemaleGender.Male && condition.CompareOperator == CompareOperator.EqualTo) || (conditionData.MaleFemaleGender == MaleFemaleGender.Female && condition.CompareOperator == CompareOperator.NotEqualTo))
                             {
                                 responses.Conditions.Remove(condition);
                                 responses.Conditions.Insert(index, new ConditionFloat()
@@ -213,8 +328,7 @@ namespace GenderDialoguePatch
                                     Data = new GetGlobalValueConditionData()
                                     {
                                         RunOnType = Condition.RunOnType.Subject,
-                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
-                                        Unknown3 = condition.Data.Unknown3
+                                        Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackMale.FormKey),
                                     }
                                 });
                             }
@@ -234,9 +348,8 @@ namespace GenderDialoguePatch
                                         ComparisonValue = 1,
                                         Data = new GetGlobalValueConditionData()
                                         {
-                                            RunOnType = conditionData.RunOnType,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
-                                            Unknown3 = condition.Data.Unknown3
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackFemale.FormKey),
                                         }
                                     });
                                 }
@@ -249,9 +362,8 @@ namespace GenderDialoguePatch
                                         ComparisonValue = 1,
                                         Data = new GetGlobalValueConditionData()
                                         {
-                                            RunOnType = conditionData.RunOnType,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
-                                            Unknown3 = condition.Data.Unknown3
+                                            RunOnType = Condition.RunOnType.Subject,
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackMale.FormKey),
                                         }
                                     });
                                 }
@@ -264,7 +376,7 @@ namespace GenderDialoguePatch
                                     ComparisonValue = 0,
                                     Data = new HasKeywordConditionData()
                                     {
-                                        RunOnType = conditionData.RunOnType,
+                                        RunOnType = Condition.RunOnType.Subject,
                                         Keyword = new FormLinkOrIndex<IKeywordGetter>(new HasKeywordConditionData(), NpcNonBinary.FormKey),
                                         Unknown3 = condition.Data.Unknown3
                                     }
@@ -302,8 +414,7 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = Condition.RunOnType.Subject,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Female.FormKey),
-                                            Unknown3 = condition.Data.Unknown3
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackFemale.FormKey),
                                         }
                                     });
                                 }
@@ -317,8 +428,7 @@ namespace GenderDialoguePatch
                                         Data = new GetGlobalValueConditionData()
                                         {
                                             RunOnType = Condition.RunOnType.Subject,
-                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), Male.FormKey),
-                                            Unknown3 = condition.Data.Unknown3
+                                            Global = new FormLinkOrIndex<IGlobalGetter>(new GetGlobalValueConditionData(), FallbackMale.FormKey),
                                         }
                                     });
                                 }
